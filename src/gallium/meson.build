@@ -72,7 +72,12 @@ else
   driver_radeonsi = declare_dependency()
 endif
 if with_gallium_nouveau
-  subdir('winsys/nouveau/drm')
+  inc_gallium_drivers_nouveau = include_directories('drivers/nouveau')
+  if with_platform_switch
+    subdir('winsys/nouveau/switch')
+  else
+    subdir('winsys/nouveau/drm')
+  endif
   subdir('drivers/nouveau')
 else
   driver_nouveau = declare_dependency()

@@ -48,6 +48,8 @@ pre_args = [
   '-DPACKAGE_BUGREPORT="https://bugs.freedesktop.org/enter_bug.cgi?product=Mesa"',
 ]
 
+boo_offline_mode = get_option('boo-offline-mode')
+
 with_vulkan_icd_dir = get_option('vulkan-icd-dir')
 with_tests = get_option('build-tests')
 with_valgrind = get_option('valgrind')
@@ -249,6 +251,7 @@ with_platform_wayland = _platforms.contains('wayland')
 with_platform_drm = _platforms.contains('drm')
 with_platform_haiku = _platforms.contains('haiku')
 with_platform_surfaceless = _platforms.contains('surfaceless')
+with_platform_switch = _platforms.contains('switch')
 
 with_platforms = false
 if _platforms.length() != 0 and _platforms != ['']
@@ -384,7 +387,7 @@ if with_any_vk and (with_platform_x11 and not with_dri3)
   error('Vulkan drivers require dri3 for X11 support')
 endif
 if with_dri or with_gallium
-  if with_glx == 'disabled' and not with_egl and not with_platform_haiku
+  if with_glx == 'disabled' and not with_egl and not with_platform_haiku and not boo_offline_mode
     error('building dri or gallium drivers require at least one window system')
   endif
 endif
@@ -705,6 +708,9 @@ endif
 if with_platform_haiku
   pre_args += '-DHAVE_HAIKU_PLATFORM'
 endif
+if with_platform_switch
+  pre_args += '-DHAVE_SWITCH_PLATFORM'
+endif
 
 prog_python = import('python3').find_python()
 has_mako = run_command(
@@ -981,7 +987,7 @@ foreach h : ['xlocale.h', 'sys/sysctl.h', 'linux/futex.h', 'endian.h', 'dlfcn.h'
   endif
 endforeach
 
-foreach f : ['strtof', 'mkostemp', 'posix_memalign', 'timespec_get', 'memfd_create']
+foreach f : ['strtof', 'mkostemp', 'timespec_get', 'memfd_create']
   if cc.has_function(f)
     pre_args += '-DHAVE_@0@'.format(f.to_upper())
   endif
@@ -1039,22 +1045,25 @@ if build_machine.system() != 'darwin'
 endif
 
 # check for dl support
-if cc.has_function('dlopen')
-  dep_dl = null_dep
-else
-  dep_dl = cc.find_library('dl')
-endif
-if cc.has_function('dladdr', dependencies : dep_dl)
-  # This is really only required for megadrivers
-  pre_args += '-DHAVE_DLADDR'
-endif
+dep_dl = null_dep
+if not boo_offline_mode
+  if cc.has_function('dlopen')
+    dep_dl = null_dep
+  else
+    dep_dl = cc.find_library('dl')
+  endif
+  if cc.has_function('dladdr', dependencies : dep_dl)
+    # This is really only required for megadrivers
+    pre_args += '-DHAVE_DLADDR'
+  endif
 
-if cc.has_function('dl_iterate_phdr')
-  pre_args += '-DHAVE_DL_ITERATE_PHDR'
-elif with_intel_vk
-  error('Intel "Anvil" Vulkan driver requires the dl_iterate_phdr function')
-elif with_dri_i965 and get_option('shader-cache')
-  error('Intel i965 GL driver requires dl_iterate_phdr when built with shader caching.')
+  if cc.has_function('dl_iterate_phdr')
+    pre_args += '-DHAVE_DL_ITERATE_PHDR'
+  elif with_intel_vk
+    error('Intel "Anvil" Vulkan driver requires the dl_iterate_phdr function')
+  elif with_dri_i965 and get_option('shader-cache')
+    error('Intel i965 GL driver requires dl_iterate_phdr when built with shader caching.')
+  endif
 endif
 
 # Determine whether or not the rt library is needed for time functions
@@ -1065,9 +1074,14 @@ else
 endif
 
 # TODO: some of these may be conditional
-dep_zlib = dependency('zlib', version : '>= 1.2.3')
-pre_args += '-DHAVE_ZLIB'
-dep_thread = dependency('threads')
+if not with_platform_switch
+  dep_zlib = dependency('zlib', version : '>= 1.2.3')
+  pre_args += '-DHAVE_ZLIB'
+  dep_thread = dependency('threads')
+else
+  dep_zlib = null_dep
+  dep_thread = null_dep
+endif
 if dep_thread.found() and host_machine.system() != 'windows'
   pre_args += '-DHAVE_PTHREAD'
 endif
@@ -1079,7 +1093,11 @@ if with_amd_vk or with_gallium_radeonsi or with_gallium_r600 or with_gallium_ope
 else
   dep_elf = null_dep
 endif
-dep_expat = dependency('expat')
+if not boo_offline_mode
+  dep_expat = dependency('expat')
+else
+  dep_expat = null_dep
+endif
 # this only exists on linux so either this is linux and it will be found, or
 # its not linux and and wont
 dep_m = cc.find_library('m', required : false)
@@ -1103,15 +1121,18 @@ _drm_freedreno_ver = '2.4.93'
 _drm_intel_ver = '2.4.75'
 _drm_ver = '2.4.75'
 
-_libdrm_checks = [
-  ['intel', with_dri_i915 or with_gallium_i915],
-  ['amdgpu', with_amd_vk or with_gallium_radeonsi],
-  ['radeon', (with_gallium_radeonsi or with_dri_r100 or with_dri_r200 or
-              with_gallium_r300 or with_gallium_r600)],
-  ['nouveau', (with_gallium_nouveau or with_dri_nouveau)],
-  ['etnaviv', with_gallium_etnaviv],
-  ['freedreno', with_gallium_freedreno],
-]
+_libdrm_checks = []
+if not boo_offline_mode
+  _libdrm_checks = [
+    ['intel', with_dri_i915 or with_gallium_i915],
+    ['amdgpu', with_amd_vk or with_gallium_radeonsi],
+    ['radeon', (with_gallium_radeonsi or with_dri_r100 or with_dri_r200 or
+                with_gallium_r300 or with_gallium_r600)],
+    ['nouveau', (with_gallium_nouveau or with_dri_nouveau)],
+    ['etnaviv', with_gallium_etnaviv],
+    ['freedreno', with_gallium_freedreno],
+  ]
+endif
 
 # VC4 only needs core libdrm support of this version, not a libdrm_vc4
 # library.
@@ -1144,14 +1165,17 @@ foreach d : _libdrm_checks
 endforeach
 
 with_gallium_drisw_kms = false
-dep_libdrm = dependency(
-  'libdrm', version : '>=' + _drm_ver,
-  required : with_dri2 or with_dri3
-)
-if dep_libdrm.found()
-  pre_args += '-DHAVE_LIBDRM'
-  if with_dri_platform == 'drm' and with_dri
-    with_gallium_drisw_kms = true
+dep_libdrm = null_dep
+if not boo_offline_mode
+  dep_libdrm = dependency(
+    'libdrm', version : '>=' + _drm_ver,
+    required : with_dri2 or with_dri3
+  )
+  if dep_libdrm.found()
+    pre_args += '-DHAVE_LIBDRM'
+    if with_dri_platform == 'drm' and with_dri
+      with_gallium_drisw_kms = true
+    endif
   endif
 endif
 

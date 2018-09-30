@@ -20,9 +20,9 @@
 
 libnouveauwinsys = static_library(
   'nouveauwinsys',
-  files('nouveau_drm_public.h', 'nouveau_drm_winsys.c'),
+  files('nouveau_switch_public.h', 'nouveau_switch_winsys.c'),
   include_directories : [
-    inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_gallium_drivers,
+    inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_gallium_drivers, inc_gallium_drivers_nouveau,
   ],
   c_args : [c_vis_args],
   dependencies : [dep_libdrm_nouveau],

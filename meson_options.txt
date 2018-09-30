@@ -23,7 +23,7 @@ option(
   type : 'array',
   value : ['auto'],
   choices : [
-    '', 'auto', 'x11', 'wayland', 'drm', 'surfaceless', 'haiku', 'android',
+    '', 'auto', 'x11', 'wayland', 'drm', 'surfaceless', 'haiku', 'android', 'switch',
   ],
   description : 'comma separated list of window systems to support. If this is set to auto all platforms applicable to the OS will be enabled.'
 )
@@ -311,4 +311,10 @@ option(
   value : 'auto',
   choices : ['auto', 'true', 'false'],
   description : 'Enable VK_EXT_acquire_xlib_display.'
+)
+option(
+  'boo-offline-mode',
+  type : 'boolean',
+  value : false,
+  description : 'Build mesa for offline shader compilation by boo'
 )
